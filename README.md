@@ -1,5 +1,7 @@
 # 介绍
 
+2026.8.25 Reality 添加 shortid
+
 最好用的 sing-box 一键安装脚本 & 管理脚本
 
 ```
