@@ -160,7 +160,7 @@ get_pbk() {
 }
 
 generate_short_id() {
-    local id=$($is_core_bin generate rand 8 --hex 2>/dev/null)
+    id=$($is_core_bin generate rand 8 --hex 2>/dev/null)
     [[ ! $id ]] && id=$(openssl rand -hex 8 2>/dev/null)
     [[ ! $id ]] && id=$(od -An -N8 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')
     [[ ! $id ]] && id=$(date +%N | cut -c1-16)
