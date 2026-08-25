@@ -155,6 +155,15 @@ get_pbk() {
     is_tmp_pbk=($($is_core_bin generate reality-keypair | sed 's/.*://'))
     is_public_key=${is_tmp_pbk[1]}
     is_private_key=${is_tmp_pbk[0]}
+    is_short_id=$(generate_short_id)
+}
+
+generate_short_id() {
+    local id=$($is_core_bin generate rand 8 --hex 2>/dev/null)
+    [[ ! $id ]] && id=$(openssl rand -hex 8 2>/dev/null)
+    [[ ! $id ]] && id=$(/dev/urandom | head -c 8 | xxd -p)
+    [[ ! $id ]] && id=$(date +%N | cut -c1-16)
+    echo $id
 }
 
 show_list() {
@@ -607,6 +616,7 @@ change() {
             [[ $is_key_err ]] && err $is_key_err_msg
             is_private_key=$is_new_private_key
             is_public_key=$is_new_public_key
+            is_short_id=$(generate_short_id)
             is_test_json=
             add $net
         fi
@@ -1111,9 +1121,9 @@ get() {
         get file $2
         if [[ $is_config_file ]]; then
             is_json_str=$(cat $is_conf_dir/"$is_config_file" | sed s#//.*##)
-            is_json_data=$(jq '(.inbounds[0]|.type,.listen_port,(.users[0]|.uuid,.password,.username),.method,.password,.override_port,.override_address,(.transport|.type,.path,.headers.host),(.tls|.server_name,.reality.private_key)),(.outbounds[1].tag)' <<<$is_json_str)
+            is_json_data=$(jq '(.inbounds[0]|.type,.listen_port,(.users[0]|.uuid,.password,.username),.method,.password,.override_port,.override_address,(.transport|.type,.path,.headers.host),(.tls|.server_name,.reality.private_key,.reality.short_id)),(.outbounds[1].tag)' <<<$is_json_str)
             [[ $? != 0 ]] && err "无法读取此文件: $is_config_file"
-            is_up_var_set=(null is_protocol port uuid password username ss_method ss_password door_port door_addr net_type path host is_servername is_private_key is_public_key)
+            is_up_var_set=(null is_protocol port uuid password username ss_method ss_password door_port door_addr net_type path host is_servername is_private_key is_short_id is_public_key)
             [[ $is_debug ]] && msg "\n------------- debug: $is_config_file -------------"
             i=0
             for v in $(sed 's/""/null/g;s/"//g' <<<"$is_json_data"); do
@@ -1249,7 +1259,8 @@ get() {
             net=reality
             [[ ! $is_servername ]] && is_servername=$is_random_servername
             [[ ! $is_private_key ]] && get_pbk
-            is_json_add="tls:{enabled:true,server_name:\"$is_servername\",reality:{enabled:true,handshake:{server:\"$is_servername\",server_port:443},private_key:\"$is_private_key\",short_id:[\"\"]}}"
+            [[ ! $is_short_id ]] && is_short_id=$(generate_short_id)
+            is_json_add="tls:{enabled:true,server_name:\"$is_servername\",reality:{enabled:true,handshake:{server:\"$is_servername\",server_port:443},private_key:\"$is_private_key\",short_id:\"$is_short_id\"}}"
             [[ $is_lower =~ "http" ]] && {
                 is_json_add="$is_json_add,transport:{type:\"http\"}"
             } || {
