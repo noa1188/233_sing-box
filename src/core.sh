@@ -68,6 +68,7 @@ info_list=(
     "用户名 (Username)"
     "跳过证书验证 (allowInsecure)"
     "拥塞控制算法 (congestion_control)"
+    "ShortId"
 )
 change_list=(
     "更改协议"
@@ -161,7 +162,7 @@ get_pbk() {
 generate_short_id() {
     local id=$($is_core_bin generate rand 8 --hex 2>/dev/null)
     [[ ! $id ]] && id=$(openssl rand -hex 8 2>/dev/null)
-    [[ ! $id ]] && id=$(/dev/urandom | head -c 8 | xxd -p)
+    [[ ! $id ]] && id=$(od -An -N8 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')
     [[ ! $id ]] && id=$(date +%N | cut -c1-16)
     echo $id
 }
@@ -1445,7 +1446,7 @@ info() {
     reality)
         is_color=41
         is_can_change=(0 1 5 9 10)
-        is_info_show=(0 1 2 3 15 4 8 16 17 18)
+        is_info_show=(0 1 2 3 15 4 8 16 17 18 22)
         is_flow=xtls-rprx-vision
         is_net_type=tcp
         [[ $net_type =~ "http" || ${is_new_protocol,,} =~ "http" ]] && {
@@ -1453,8 +1454,8 @@ info() {
             is_net_type=h2
             is_info_show=(${is_info_show[@]/15/})
         }
-        is_info_str=($is_protocol $is_addr $port $uuid $is_flow $is_net_type reality $is_servername chrome $is_public_key)
-        is_url="$is_protocol://$uuid@$is_addr:$port?encryption=none&security=reality&flow=$is_flow&type=$is_net_type&sni=$is_servername&pbk=$is_public_key&fp=chrome#233boy-$net-$is_addr"
+        is_info_str=($is_protocol $is_addr $port $uuid $is_flow $is_net_type reality $is_servername chrome $is_public_key $is_short_id)
+        is_url="$is_protocol://$uuid@$is_addr:$port?encryption=none&security=reality&flow=$is_flow&type=$is_net_type&sni=$is_servername&pbk=$is_public_key&sid=$is_short_id&fp=chrome#233boy-$net-$is_addr"
         ;;
     anytls)
         is_can_change=(0 1 4)
