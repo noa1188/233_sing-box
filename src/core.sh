@@ -169,7 +169,7 @@ generate_short_id() {
     [[ ! $id || ${#id} -lt 16 ]] && id=$(cat /dev/urandom | tr -dc 'a-f0-9' | head -c 16)
     [[ ! $id || ${#id} -lt 16 ]] && id=$(printf '%016x' $((RANDOM * RANDOM * RANDOM)))
     [[ ! $id || ${#id} -lt 16 ]] && id=$(uuidgen 2>/dev/null | tr '-' '' | head -c 16)
-    echo $id
+    printf '%s\n' "$id"
 }
 
 show_list() {
