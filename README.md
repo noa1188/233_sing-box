@@ -2,6 +2,14 @@
 
 最好用的 sing-box 一键安装脚本 & 管理脚本
 
+```
+bash <(wget -qO- -o- https://github.com/noa1188/233_sing-box/raw/main/install.sh)
+```
+
+如果需要指定 sing-box 版本，请在安装命令后面加 -v ver 参数
+
+如需查看安装命令帮助，在安装命令后面加 -h 即可
+
 # 特点
 
 - 快速安装
