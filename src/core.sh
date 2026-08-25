@@ -165,6 +165,10 @@ generate_short_id() {
     [[ ! $id ]] && id=$(od -An -N8 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')
     [[ ! $id ]] && id=$(date +%N | cut -c1-16)
     [[ ! $id || ${#id} -lt 16 ]] && id=$(head -c 8 /dev/urandom | od -An -tx1 | tr -d ' \n')
+    [[ ! $id || ${#id} -lt 16 ]] && id=$(dd if=/dev/urandom bs=1 count=8 2>/dev/null | xxd -p 2>/dev/null)
+    [[ ! $id || ${#id} -lt 16 ]] && id=$(cat /dev/urandom | tr -dc 'a-f0-9' | head -c 16)
+    [[ ! $id || ${#id} -lt 16 ]] && id=$(printf '%016x' $((RANDOM * RANDOM * RANDOM)))
+    [[ ! $id || ${#id} -lt 16 ]] && id=$(uuidgen 2>/dev/null | tr '-' '' | head -c 16)
     echo $id
 }
 
