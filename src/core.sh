@@ -164,6 +164,7 @@ generate_short_id() {
     [[ ! $id ]] && id=$(openssl rand -hex 8 2>/dev/null)
     [[ ! $id ]] && id=$(od -An -N8 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')
     [[ ! $id ]] && id=$(date +%N | cut -c1-16)
+    [[ ! $id || ${#id} -lt 16 ]] && id=$(head -c 8 /dev/urandom | od -An -tx1 | tr -d ' \n')
     echo $id
 }
 
