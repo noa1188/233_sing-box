@@ -152,10 +152,17 @@ get_port() {
 }
 
 get_pbk() {
-    is_tmp_pbk=($($is_core_bin generate reality-keypair | sed 's/^[[:space:]]*//'))
-    is_public_key=${is_tmp_pbk[1]}
-    is_private_key=${is_tmp_pbk[0]}
-    is_short_id=$(echo "$is_public_key" | head -c 32)
+    # Generate keypair and parse output
+    local keypair
+    keypair=$($is_core_bin generate reality-keypair 2>/dev/null)
+    # Assume output format "private_key/public_key"
+    IFS='/' read -r is_private_key is_public_key <<< "$keypair"
+    # Ensure variables are set
+    if [[ -z $is_public_key ]]; then
+        is_public_key=""
+    fi
+    # short_id: first 32 chars of public key
+    is_short_id=${is_public_key:0:32}
 }
 
 show_list() {
