@@ -68,7 +68,6 @@ info_list=(
     "用户名 (Username)"
     "跳过证书验证 (allowInsecure)"
     "拥塞控制算法 (congestion_control)"
-    "short_id"
 )
 change_list=(
     "更改协议"
@@ -156,6 +155,7 @@ get_pbk() {
     is_tmp_pbk=($($is_core_bin generate reality-keypair | sed 's/.*://'))
     is_public_key=${is_tmp_pbk[1]}
     is_private_key=${is_tmp_pbk[0]}
+    is_short_id=$(echo "$is_public_key" | head -c 32)
 }
 
 show_list() {
@@ -1112,9 +1112,9 @@ get() {
         get file $2
         if [[ $is_config_file ]]; then
             is_json_str=$(cat $is_conf_dir/"$is_config_file" | sed s#//.*##)
-            is_json_data=$(jq '(.inbounds[0]|.type,.listen_port,(.users[0]|.uuid,.password,.username),.method,.password,.override_port,.override_address,(.transport|.type,.path,.headers.host),(.tls|.server_name,.reality.private_key,.reality.short_id)),(.outbounds[1].tag)' <<<$is_json_str)
+            is_json_data=$(jq '(.inbounds[0]|.type,.listen_port,(.users[0]|.uuid,.password,.username),.method,.password,.override_port,.override_address,(.transport|.type,.path,.headers.host),(.tls|.server_name,.reality.private_key)),(.outbounds[1].tag)' <<<$is_json_str)
             [[ $? != 0 ]] && err "无法读取此文件: $is_config_file"
-            is_up_var_set=(null is_protocol port uuid password username ss_method ss_password door_port door_addr net_type path host is_servername is_private_key is_short_id is_public_key)
+            is_up_var_set=(null is_protocol port uuid password username ss_method ss_password door_port door_addr net_type path host is_servername is_private_key is_public_key)
             [[ $is_debug ]] && msg "\n------------- debug: $is_config_file -------------"
             i=0
             for v in $(sed 's/""/null/g;s/"//g' <<<"$is_json_data"); do
@@ -1250,12 +1250,7 @@ get() {
             net=reality
             [[ ! $is_servername ]] && is_servername=$is_random_servername
             [[ ! $is_private_key ]] && get_pbk
-            if [[ -z $is_short_id ]]; then
-                is_short_id=$(printf '%016x' $RANDOM)
-
-            fi
-            is_json_add="tls:{enabled:true,server_name:\"$is_servername\",reality:{enabled:true,handshake:{server:\"$is_servername\",server_port:443},private_key:\"$is_private_key\",short_id:[\"$is_short_id\"]}}"
-
+            is_json_add="tls:{enabled:true,server_name:\"$is_servername\",reality:{enabled:true,handshake:{server:\"$is_servername\",server_port:443},private_key:\"$is_private_key\",short_id:\"$is_short_id\"}}"
             [[ $is_lower =~ "http" ]] && {
                 is_json_add="$is_json_add,transport:{type:\"http\"}"
             } || {
@@ -1440,7 +1435,7 @@ info() {
     reality)
         is_color=41
         is_can_change=(0 1 5 9 10)
-        is_info_show=(0 1 2 3 15 4 8 16 17 18 22)
+        is_info_show=(0 1 2 3 15 4 8 16 17 18)
         is_flow=xtls-rprx-vision
         is_net_type=tcp
         [[ $net_type =~ "http" || ${is_new_protocol,,} =~ "http" ]] && {
@@ -1448,7 +1443,7 @@ info() {
             is_net_type=h2
             is_info_show=(${is_info_show[@]/15/})
         }
-        is_info_str=($is_protocol $is_addr $port $uuid $is_flow $is_net_type reality $is_servername chrome $is_public_key $is_short_id)
+        is_info_str=($is_protocol $is_addr $port $uuid $is_flow $is_net_type reality $is_servername chrome $is_public_key)
         is_url="$is_protocol://$uuid@$is_addr:$port?encryption=none&security=reality&flow=$is_flow&type=$is_net_type&sni=$is_servername&pbk=$is_public_key&fp=chrome#233boy-$net-$is_addr"
         ;;
     anytls)
