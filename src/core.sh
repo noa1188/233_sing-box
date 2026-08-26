@@ -155,14 +155,23 @@ get_pbk() {
     # Generate keypair and parse output
     local keypair
     keypair=$($is_core_bin generate reality-keypair 2>/dev/null)
-    # Assume output format "private_key/public_key"
-    IFS='/' read -r is_private_key is_public_key <<< "$keypair"
+    
+    # Extract private and public keys from the output
+    # The output format is:
+    # PrivateKey: <base64-private-key>
+    # PublicKey: <base64-public-key>
+    is_private_key=$(echo "$keypair" | grep -i "PrivateKey" | sed 's/.*PrivateKey: //')
+    is_public_key=$(echo "$keypair" | grep -i "PublicKey" | sed 's/.*PublicKey: //')
+    
     # Ensure variables are set
     if [[ -z $is_public_key ]]; then
         is_public_key=""
     fi
-    # short_id: first 32 chars of public key
-    is_short_id=${is_public_key:0:32}
+    
+    # short_id: generate a random 16-character hex string (standard for sing-box short_id)
+    is_short_id=$($is_core_bin generate rand --hex 16 2>/dev/null)
+    [[ -z $is_short_id ]] && is_short_id=$(openssl rand -hex 16 2>/dev/null)
+    [[ -z $is_short_id ]] && is_short_id=$(head -c 8 /dev/urandom 2>/dev/null | xxd -p | cut -c1-16)
 }
 
 show_list() {
