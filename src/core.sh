@@ -152,7 +152,7 @@ get_port() {
 }
 
 get_pbk() {
-    is_tmp_pbk=($($is_core_bin generate reality-keypair | sed 's/.*://'))
+    is_tmp_pbk=($($is_core_bin generate reality-keypair | sed 's/^[[:space:]]*//'))
     is_public_key=${is_tmp_pbk[1]}
     is_private_key=${is_tmp_pbk[0]}
     is_short_id=$(echo "$is_public_key" | head -c 32)
