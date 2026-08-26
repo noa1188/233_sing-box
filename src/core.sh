@@ -68,7 +68,6 @@ info_list=(
     "用户名 (Username)"
     "跳过证书验证 (allowInsecure)"
     "拥塞控制算法 (congestion_control)"
-    "ShortId"
 )
 change_list=(
     "更改协议"
@@ -153,49 +152,9 @@ get_port() {
 }
 
 get_pbk() {
-     local tmp_output=$($is_core_bin generate reality-keypair 2>/dev/null)
-      is_public_key=$(echo "$tmp_output" | grep -o 'public key:.*')
-     [[ $is_public_key ]] && is_short_id=$(generate_reality_shortid) || {
-         local tmp_output=$($is_core_bin generate keypair 2>/dev/null)
-          is_public_key=$(echo "$tmp_output" | grep -o 'public key:.*')
-     }
-}
-
-generate_reality_shortid() {
-    local result=""
-    
-     # Method 1: /dev/urandom with dd
-      if [[ -r "/dev/urandom" ]]; then
-          result=$(dd if=/dev/urandom bs=8 count=1 2>/dev/null | od -An -tx1)
-          result=$(echo "$result" | tr -d ' \n')
-      fi
-      
-     # Method 2: openssl rand with fallback to base64 if needed  
-       result=$(openssl rand -hex 16)
-      [[ ${#result} -lt 32 ]] && {
-          local tmp_rand=$(printf '%016x' $((RANDOM * RANDOM)))
-          if [[ ${#tmp_rand} -ge 32 ]]; then
-              result="$tmp_rand"
-          fi
-      }
-      
-     # Method 3: date nanoseconds as last resort  
-       if [[ ${#result} -lt 32 ]]; then
-          local tmp_ns=$(date +%s%N)
-        if [[ ${#tmp_ns} -ge 32 ]]; then
-            result=$(echo "$tmp_ns" | cut -c3-18)
-          fi
-      }
-
-     # Return first 16 characters if successful, otherwise generate from RANDOM bytes as fallback  
-       result=$(printf '%0s' "$result")
-      [[ ${#result} -ge 16 ]] && printf "%b" "${result:0:32}" || {
-          local hex=""
-            for i in $(seq 1 8); do
-                hex="${hex}$(printf '%02x' $((RANDOM % 256)))"
-            done
-          printf "%b" "$hex"
-      }
+    is_tmp_pbk=($($is_core_bin generate reality-keypair | sed 's/.*://'))
+    is_public_key=${is_tmp_pbk[1]}
+    is_private_key=${is_tmp_pbk[0]}
 }
 
 show_list() {
@@ -646,35 +605,10 @@ change() {
             fi
             rm $is_tmp_json
             [[ $is_key_err ]] && err $is_key_err_msg
-             is_private_key=$is_new_private_key
-               if [[ -z "$is_public_key" ]]; then is_public_key=$3; fi
-
-             # Generate new short_id if not provided
-              [[ -z "$is_short_id" ]] && {
-                  is_public_key=$3
-
-                   if command -v openssl &>/dev/null; then
-                       local tmp_output=$(openssl rand 16)
-                      if [[ ${#tmp_output} -ge 32 ]]; then
-                          is_short_id=$(echo "$output" | cut -c3-18)
-                      fi
-
-                       local tmp_rand=$is_short_id
-                  else if [[ -r "/dev/urandom" ]]; then
-
-                      is_tmp_rand=$(dd if=/dev/urandom bs=8 count=1 2>/dev/null | od -An -tx1)
-                      is_tmp_rand=$(echo "$is_short_id" | tr -d ' \n')
-                       if [[ ${#tmp_rand} -ge 32 ]]; then
-                           is_short_id="$is_tmp_rand"
-                       fi
-
-                  else local tmp_output=$(printf '%016x' $((RANDOM * RANDOM)))
-                      if [[ ${#tmp_rand} -ge 32 ]]; then
-                          is_short_id="$is_tmp_random"
-                      fi
-
-                  fi}
-              }
+            is_private_key=$is_new_private_key
+            is_public_key=$is_new_public_key
+            is_test_json=
+            add $net
         fi
         ;;
     10)
@@ -898,47 +832,9 @@ add() {
         esac
     fi
 
-     case "${1,}" in reality*)
-        is_reality=1
-        
-         # Ensure short_id exists for Reality configs
-          if [[ -z "$is_short_id" ]]; then
-              is_short_id=$(generate_reality_shortid)
-          fi
-
-      esac
-    case "${1,}" in reality*)
-        is_reality=1
-        
-        # Ensure all required variables are initialized for Reality configs
-        get new 2>/dev/null || true
-        [[ ! $is_servername ]] && {
-            host=$is_random_servername
-            export ${!host}
-            
-            if [[ -f "$tmpcore" ]]; then
-                is_tmp_pbk=($("$is_core_bin generate reality-keypair" | sed 's/.*://'))
-                is_public_key=${is_tmp_pbk[1]}
-                is_private_key=${is_tmp_pbk[0]}
-                
-                # Generate short_id when not provided by user or in the get protocols phase
-                export ${!short_id}
-            fi
-            
-            if [[ ! -f "$tmpcore" ]]; then
-                generate_short_id > /proc/self/fd/3 2>/dev/null || true
-                is_short_id=${is_tmp_pbk[0]}
-                
-                # Export variables properly for later use in get protocols phase
-                export ${!short_id}
-            fi
-            
-        }
-        
-    esac
-
+    # no prefer protocol
     [[ ! $is_new_protocol ]] && ask set_protocol
-    
+
     if [[ ${is_new_protocol,,} == 'anytls' ]]; then
         is_core_major=$(echo "$is_core_ver" | cut -d. -f1)
         is_core_minor=$(echo "$is_core_ver" | cut -d. -f2)
@@ -1215,9 +1111,9 @@ get() {
         get file $2
         if [[ $is_config_file ]]; then
             is_json_str=$(cat $is_conf_dir/"$is_config_file" | sed s#//.*##)
-            is_json_data=$(jq '(.inbounds[0]|.type,.listen_port,(.users[0]|.uuid,.password,.username),.method,.password,.override_port,.override_address,(.transport|.type,.path,.headers.host),(.tls|.server_name,.reality.private_key,.reality.short_id)),(.outbounds[1].tag)' <<<$is_json_str)
+            is_json_data=$(jq '(.inbounds[0]|.type,.listen_port,(.users[0]|.uuid,.password,.username),.method,.password,.override_port,.override_address,(.transport|.type,.path,.headers.host),(.tls|.server_name,.reality.private_key)),(.outbounds[1].tag)' <<<$is_json_str)
             [[ $? != 0 ]] && err "无法读取此文件: $is_config_file"
-            is_up_var_set=(null is_protocol port uuid password username ss_method ss_password door_port door_addr net_type path host is_servername is_private_key is_short_id is_public_key)
+            is_up_var_set=(null is_protocol port uuid password username ss_method ss_password door_port door_addr net_type path host is_servername is_private_key is_public_key)
             [[ $is_debug ]] && msg "\n------------- debug: $is_config_file -------------"
             i=0
             for v in $(sed 's/""/null/g;s/"//g' <<<"$is_json_data"); do
@@ -1351,55 +1247,10 @@ get() {
             ;;
         *reality*)
             net=reality
-            
-                # Ensure servername is set
-             [[ -z "$is_servername" ]] && {
-                 if command -v shuf &>/dev/null; then
-                     is_servername=${servername_list[$(shuf -i 0-${#servername_list[@]} -n1) - 1]}
-                 else
-                     is_servername=${servername_list[$RANDOM % ${#servername_list[@]} - 1]}
-                 fi
-             }
-            
-            # Ensure Reality keys and short_id are generated if not provided
-              [[ -z "$is_private_key" || ! $is_public_key ]] && {
-                  if command -v openssl &>/dev/null; then
-                      is_tmp_output=$(openssl genrsa 2048 2>&1 | openssl rsa -outform PEM)
-                      is_private_key=$(echo "$is_tmp_output" | grep "-----BEGIN RSA PRIVATE KEY-----")
-                      is_public_key=$(echo "$is_tmp_output" | openssl rsa -pubout 2>/dev/null)
-                  else
-                      is_private_key=$(openssl genpkey -algorithm RSA 2>/dev/null | openssl pkey -pubout)
-                      is_public_key=$(openssl genpkey 2>/dev/null | openssl rsa -pubout)
-                  fi
-              }
-            
-            # Generate short_id if not provided using reliable method with fallbacks
-             [[ -z "$is_short_id" ]] && {
-                 # Method 1: /dev/urandom with dd
-                  if [[ -r "/dev/urandom" ]]; then
-                      is_short_id=$(dd if=/dev/urandom bs=8 count=1 2>/dev/null | od -An -tx1)
-                      is_short_id=$(echo "$is_short_id" | tr -d ' \n')
-                  fi
-                  
-                 # Method 2: openssl rand with fallback to base64 if needed  
-                   is_short_id=$(openssl rand -hex 16)
-                  [[ ${#is_short_id} -lt 32 ]] && {
-                      is_tmp_rand=$(printf '%016x' $((RANDOM * RANDOM)))
-                      if [[ ${#is_tmp_rand} -ge 32 ]]; then
-                          is_short_id="$tmp_rand"
-                      fi
-                  }
-                  
-                 # Method 3: date nanoseconds as last resort  
-                   if [[ ${#is_short_id} -lt 32 ]]; then
-                      is_tmp_ns=$(date +%s%N)
-                      if [[ ${#is_short_id} -ge 32 ]]; then
-                          is_tmp_ns=$(echo "$tmp_rand" | cut -c3-18)
-                      fi
-                  fi
-
-             }
-            is_json_add="tls:{enabled:true,server_name:\"$is_servername\",reality:{enabled:true,handshake:{server:\"$is_servername\",server_port:443},private_key:\"${is_private_key#-----BEGIN.*?-----\}",public_key:\"$is_public_key\",short_id:\"${is_short_id:0:16}\"}}"
+            [[ ! $is_servername ]] && is_servername=$is_random_servername
+            [[ ! $is_private_key ]] && get_pbk
+            [[ ! $is_short_id ]] && is_short_id=$($is_core_bin generate rand 16 --hex)
+            is_json_add="tls:{enabled:true,server_name:\"$is_servername\",reality:{enabled:true,handshake:{server:\"$is_servername\",server_port:443},private_key:\"$is_private_key\",short_id:[\"$is_short_id\"]}}"
             [[ $is_lower =~ "http" ]] && {
                 is_json_add="$is_json_add,transport:{type:\"http\"}"
             } || {
@@ -1584,7 +1435,7 @@ info() {
     reality)
         is_color=41
         is_can_change=(0 1 5 9 10)
-        is_info_show=(0 1 2 3 15 4 8 16 17 18 22)
+        is_info_show=(0 1 2 3 15 4 8 16 17 18)
         is_flow=xtls-rprx-vision
         is_net_type=tcp
         [[ $net_type =~ "http" || ${is_new_protocol,,} =~ "http" ]] && {
@@ -1592,8 +1443,8 @@ info() {
             is_net_type=h2
             is_info_show=(${is_info_show[@]/15/})
         }
-        is_info_str=($is_protocol $is_addr $port $uuid $is_flow $is_net_type reality $is_servername chrome $is_public_key $is_short_id)
-        is_url="$is_protocol://$uuid@$is_addr:$port?encryption=none&security=reality&flow=$is_flow&type=$is_net_type&sni=$is_servername&pbk=$is_public_key&sid=$is_short_id&fp=chrome#233boy-$net-$is_addr"
+        is_info_str=($is_protocol $is_addr $port $uuid $is_flow $is_net_type reality $is_servername chrome $is_public_key)
+        is_url="$is_protocol://$uuid@$is_addr:$port?encryption=none&security=reality&flow=$is_flow&type=$is_net_type&sni=$is_servername&pbk=$is_public_key&fp=chrome#233boy-$net-$is_addr"
         ;;
     anytls)
         is_can_change=(0 1 4)
