@@ -1250,7 +1250,7 @@ get() {
             net=reality
             [[ ! $is_servername ]] && is_servername=$is_random_servername
             [[ ! $is_private_key ]] && get_pbk
-            [[ ! $is_short_id ]] && is_short_id=$($is_core_bin generate rand 16 --hex)
+            [[ ! $is_short_id ]] && { is_short_id=$($is_core_bin generate rand 16 --hex; [[ -z $is_short_id ]] && is_short_id=$(printf '%016x' $RANDOM) }
             is_json_add="tls:{enabled:true,server_name:\"$is_servername\",reality:{enabled:true,handshake:{server:\"$is_servername\",server_port:443},private_key:\"$is_private_key\",short_id:[\"$is_short_id\"]}}"
             [[ $is_lower =~ "http" ]] && {
                 is_json_add="$is_json_add,transport:{type:\"http\"}"
