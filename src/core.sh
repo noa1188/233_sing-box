@@ -153,23 +153,49 @@ get_port() {
 }
 
 get_pbk() {
-    is_tmp_pbk=($($is_core_bin generate reality-keypair | sed 's/.*://'))
-    is_public_key=${is_tmp_pbk[1]}
-    is_private_key=${is_tmp_pbk[0]}
-    is_short_id=$(generate_short_id)
+     local tmp_output=$($is_core_bin generate reality-keypair 2>/dev/null)
+      is_public_key=$(echo "$tmp_output" | grep -o 'public key:.*')
+     [[ $is_public_key ]] && is_short_id=$(generate_reality_shortid) || {
+         local tmp_output=$($is_core_bin generate keypair 2>/dev/null)
+          is_public_key=$(echo "$tmp_output" | grep -o 'public key:.*')
+     }
 }
 
-generate_short_id() {
-    read -r id < <($is_core_bin generate rand 8 --hex 2>/dev/null)
-    [[ ! $id ]] && read -r id < <(openssl rand -hex 16 2>/dev/null)
-    [[ ! $id || ${#id} -lt 16 ]] && read -r id < <(od -An -tx1 /dev/urandom | tr -d ' \n' | head -c 16)
-    [[ ! $id || ${#id} -lt 16 ]] && read -r id < <(date +%s%N | cut -c3-18)
-    [[ ! $id || ${#id} -lt 16 ]] && read -r id < <(head -c 8 /dev/urandom | od -An -tx1 | tr -d ' \n')
-    [[ ! $id || ${#id} -lt 16 ]] && read -r id < <(dd if=/dev/urandom bs=1 count=8 2>/dev/null | xxd -p)
-    [[ ! $id || ${#id} -lt 16 ]] && read -r id < <(cat /dev/urandom | tr -dc 'a-f0-9' | head -c 16)
-    [[ ! $id || ${#id} -lt 16 ]] && read -r id < <(printf '%016x' $((RANDOM * RANDOM * RANDOM)))
-    [[ ! $id || ${#id} -lt 16 ]] && read -r id < <(uuidgen 2>/dev/null | tr '-' '' | head -c 16)
-    printf '%s\n' "$id"
+generate_reality_shortid() {
+    local result=""
+    
+     # Method 1: /dev/urandom with dd
+      if [[ -r "/dev/urandom" ]]; then
+          result=$(dd if=/dev/urandom bs=8 count=1 2>/dev/null | od -An -tx1)
+          result=$(echo "$result" | tr -d ' \n')
+      fi
+      
+     # Method 2: openssl rand with fallback to base64 if needed  
+       result=$(openssl rand -hex 16)
+      [[ ${#result} -lt 32 ]] && {
+          local tmp_rand=$(printf '%016x' $((RANDOM * RANDOM)))
+          if [[ ${#tmp_rand} -ge 32 ]]; then
+              result="$tmp_rand"
+          fi
+      }
+      
+     # Method 3: date nanoseconds as last resort  
+       if [[ ${#result} -lt 32 ]]; then
+          local tmp_ns=$(date +%s%N)
+        if [[ ${#tmp_ns} -ge 32 ]]; then
+            result=$(echo "$tmp_ns" | cut -c3-18)
+          fi
+      }
+
+     # Return first 16 characters if successful, otherwise generate from RANDOM bytes as fallback  
+       result=$(printf '%0s' "$result")
+      [[ ${#result} -ge 16 ]] && printf "%b" "${result:0:32}" || {
+          local hex=""
+            for i in $(seq 1 8); do
+                hex="${hex}$(printf '%02x' $((RANDOM % 256)))"
+            done
+          printf "%b" "$hex"
+      }
 }
 
 show_list() {
@@ -620,11 +646,35 @@ change() {
             fi
             rm $is_tmp_json
             [[ $is_key_err ]] && err $is_key_err_msg
-            is_private_key=$is_new_private_key
-            is_public_key=$is_new_public_key
-            is_short_id=$(generate_short_id)
-            is_test_json=
-            add $net
+             is_private_key=$is_new_private_key
+               if [[ -z "$is_public_key" ]]; then is_public_key=$3; fi
+
+             # Generate new short_id if not provided
+              [[ -z "$is_short_id" ]] && {
+                  is_public_key=$3
+
+                   if command -v openssl &>/dev/null; then
+                       local tmp_output=$(openssl rand 16)
+                      if [[ ${#tmp_output} -ge 32 ]]; then
+                          is_short_id=$(echo "$output" | cut -c3-18)
+                      fi
+
+                       local tmp_rand=$is_short_id
+                  else if [[ -r "/dev/urandom" ]]; then
+
+                      is_tmp_rand=$(dd if=/dev/urandom bs=8 count=1 2>/dev/null | od -An -tx1)
+                      is_tmp_rand=$(echo "$is_short_id" | tr -d ' \n')
+                       if [[ ${#tmp_rand} -ge 32 ]]; then
+                           is_short_id="$is_tmp_rand"
+                       fi
+
+                  else local tmp_output=$(printf '%016x' $((RANDOM * RANDOM)))
+                      if [[ ${#tmp_rand} -ge 32 ]]; then
+                          is_short_id="$is_tmp_random"
+                      fi
+
+                  fi}
+              }
         fi
         ;;
     10)
@@ -848,9 +898,47 @@ add() {
         esac
     fi
 
-    # no prefer protocol
-    [[ ! $is_new_protocol ]] && ask set_protocol
+     case "${1,}" in reality*)
+        is_reality=1
+        
+         # Ensure short_id exists for Reality configs
+          if [[ -z "$is_short_id" ]]; then
+              is_short_id=$(generate_reality_shortid)
+          fi
 
+      esac
+    case "${1,}" in reality*)
+        is_reality=1
+        
+        # Ensure all required variables are initialized for Reality configs
+        get new 2>/dev/null || true
+        [[ ! $is_servername ]] && {
+            host=$is_random_servername
+            export ${!host}
+            
+            if [[ -f "$tmpcore" ]]; then
+                is_tmp_pbk=($("$is_core_bin generate reality-keypair" | sed 's/.*://'))
+                is_public_key=${is_tmp_pbk[1]}
+                is_private_key=${is_tmp_pbk[0]}
+                
+                # Generate short_id when not provided by user or in the get protocols phase
+                export ${!short_id}
+            fi
+            
+            if [[ ! -f "$tmpcore" ]]; then
+                generate_short_id > /proc/self/fd/3 2>/dev/null || true
+                is_short_id=${is_tmp_pbk[0]}
+                
+                # Export variables properly for later use in get protocols phase
+                export ${!short_id}
+            fi
+            
+        }
+        
+    esac
+
+    [[ ! $is_new_protocol ]] && ask set_protocol
+    
     if [[ ${is_new_protocol,,} == 'anytls' ]]; then
         is_core_major=$(echo "$is_core_ver" | cut -d. -f1)
         is_core_minor=$(echo "$is_core_ver" | cut -d. -f2)
@@ -1263,10 +1351,55 @@ get() {
             ;;
         *reality*)
             net=reality
-            [[ ! $is_servername ]] && is_servername=$is_random_servername
-            [[ ! $is_private_key ]] && get_pbk
-            [[ ! $is_short_id ]] && is_short_id=$(generate_short_id)
-            is_json_add="tls:{enabled:true,server_name:\"$is_servername\",reality:{enabled:true,handshake:{server:\"$is_servername\",server_port:443},private_key:\"$is_private_key\",short_id:\"$is_short_id\"}}"
+            
+                # Ensure servername is set
+             [[ -z "$is_servername" ]] && {
+                 if command -v shuf &>/dev/null; then
+                     is_servername=${servername_list[$(shuf -i 0-${#servername_list[@]} -n1) - 1]}
+                 else
+                     is_servername=${servername_list[$RANDOM % ${#servername_list[@]} - 1]}
+                 fi
+             }
+            
+            # Ensure Reality keys and short_id are generated if not provided
+              [[ -z "$is_private_key" || ! $is_public_key ]] && {
+                  if command -v openssl &>/dev/null; then
+                      is_tmp_output=$(openssl genrsa 2048 2>&1 | openssl rsa -outform PEM)
+                      is_private_key=$(echo "$is_tmp_output" | grep "-----BEGIN RSA PRIVATE KEY-----")
+                      is_public_key=$(echo "$is_tmp_output" | openssl rsa -pubout 2>/dev/null)
+                  else
+                      is_private_key=$(openssl genpkey -algorithm RSA 2>/dev/null | openssl pkey -pubout)
+                      is_public_key=$(openssl genpkey 2>/dev/null | openssl rsa -pubout)
+                  fi
+              }
+            
+            # Generate short_id if not provided using reliable method with fallbacks
+             [[ -z "$is_short_id" ]] && {
+                 # Method 1: /dev/urandom with dd
+                  if [[ -r "/dev/urandom" ]]; then
+                      is_short_id=$(dd if=/dev/urandom bs=8 count=1 2>/dev/null | od -An -tx1)
+                      is_short_id=$(echo "$is_short_id" | tr -d ' \n')
+                  fi
+                  
+                 # Method 2: openssl rand with fallback to base64 if needed  
+                   is_short_id=$(openssl rand -hex 16)
+                  [[ ${#is_short_id} -lt 32 ]] && {
+                      is_tmp_rand=$(printf '%016x' $((RANDOM * RANDOM)))
+                      if [[ ${#is_tmp_rand} -ge 32 ]]; then
+                          is_short_id="$tmp_rand"
+                      fi
+                  }
+                  
+                 # Method 3: date nanoseconds as last resort  
+                   if [[ ${#is_short_id} -lt 32 ]]; then
+                      is_tmp_ns=$(date +%s%N)
+                      if [[ ${#is_short_id} -ge 32 ]]; then
+                          is_tmp_ns=$(echo "$tmp_rand" | cut -c3-18)
+                      fi
+                  fi
+
+             }
+            is_json_add="tls:{enabled:true,server_name:\"$is_servername\",reality:{enabled:true,handshake:{server:\"$is_servername\",server_port:443},private_key:\"${is_private_key#-----BEGIN.*?-----\}",public_key:\"$is_public_key\",short_id:\"${is_short_id:0:16}\"}}"
             [[ $is_lower =~ "http" ]] && {
                 is_json_add="$is_json_add,transport:{type:\"http\"}"
             } || {
