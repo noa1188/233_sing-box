@@ -1252,9 +1252,10 @@ get() {
             [[ ! $is_private_key ]] && get_pbk
             if [[ -z $is_short_id ]]; then
                 is_short_id=$(printf '%016x' $RANDOM)
+
             fi
             is_json_add="tls:{enabled:true,server_name:\"$is_servername\",reality:{enabled:true,handshake:{server:\"$is_servername\",server_port:443},private_key:\"$is_private_key\",short_id:[\"$is_short_id\"]}}"
-            [[ -z $is_short_id ]] && is_short_id=$(printf '%016x' $RANDOM)
+
             [[ $is_lower =~ "http" ]] && {
                 is_json_add="$is_json_add,transport:{type:\"http\"}"
             } || {
